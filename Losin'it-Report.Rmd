@@ -1,0 +1,762 @@
+---
+title: "Losin'it-Report"
+author: "Shayan Dhillon"
+date: "2022-12-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(countrycode)
+library(dplyr)
+library(ggplot2)
+library(modelr)
+library(readxl)
+```
+
+## Team name: Losin'it
+
+
+
+
+
+| Last Name        | First Name     | Student ID  |
+|:------------- |:-------------| :-----|
+| **Dhillon**     | Shayan | 169026351 |
+| Gao     | Lauren      |   211992490 |
+| Heer  | Gracie     |    169034824 |
+| Lang | Yilang      |    193073430 |
+| Pama | Rasdeep      |    169017208 |
+
+
+
+
+# Table of Contents 
+|Section | Page |
+|:------------- | -----:|
+|Introduction|  1 |
+|Datasets|   2 |
+|Descriptive Stats|    6 |
+|Discussion|    16 |
+|Conclusion|    17 |
+|Citation| 17|
+
+
+
+
+```{r, include=FALSE}
+#INTRO
+# loading all files!
+AtlanticCyclonesRAW <- read_csv("Atlactic-Cyclones.csv", col_names = c("1", "2", "3", "4"))
+PacificCyclonesRAW <- read_csv("Pacific-Cyclones.csv", col_names = c("1", "2", "3", "4"))
+
+
+ClimateFile <- "climate_change_opinion_survey_aggregated_06252021.xlsx"
+
+climate_happening <- read_excel(ClimateFile, sheet = "climate_happening")
+climate_awareness <- read_excel(ClimateFile, sheet = "climate_awareness")
+climate_beliefs <- read_excel(ClimateFile, sheet = "climate_beliefs")
+climate_beliefs[1] <- c("Humans", "Environment", "Both, Humans and Environment", "Other", "Climate Change isn't Happening","Refused", "(Unweighted Base)")
+climate_importance <- read_excel(ClimateFile, sheet = "climate_importance")
+fossil_more_less <- read_excel(ClimateFile, sheet = "fossil_more_less")
+
+
+
+
+#ClimateHappen<- read_csv("climate_happening.csv")
+#ClimateAware <- read_csv("climate_awareness.csv")
+#ClimateBelief <- read_csv("climate_beliefs.csv", col_names = c("Countries", "Humans", "Environment", "Both, Humans and Environment", "Other", "Climate Change isn't Happening","Refused", "(Unweighted Base)"), skip = 1)
+#ClimateImportance <- read_csv("climate_importance.csv")
+#ClimateFossilFuels <- read_csv("fossil_more_less.csv")
+
+sea_ice <- read_excel("Sea_Ice_Index_Monthly_Data_by_Year_G02135_v3.0.xlsx")
+
+#emissions<-read_csv("C:\\Users\\graci\\Documents\\Data100 tidy Data\\filteredTotal1.csv")
+emissionsTibble<-read_csv("INT-Export-Emissions-09-09-2022_23-18-25.csv",skip=8, col_names = c("API", "EMPTY", as.character(1949:2019)))
+
+filteredTotal1 <- read_csv("filteredTotal2.csv")
+
+
+```
+
+
+```{r, include=FALSE}
+#Sea ice
+
+#combined<-sea_ice %>% select(...1, Annual) %>% left_join(emissions, by=c("...1" = "Year"))
+#combinedFiltered <- combined %>% filter(!is.na(total))
+
+SeaIcePlots <- ggplot(data = sea_ice) +
+    geom_smooth(mapping = aes(y = January, x = ...1, color = 'January')) +
+    geom_smooth(mapping = aes(y = February, x = ...1, color = 'February')) +
+    geom_smooth(mapping = aes(y = March, x = ...1, color = 'March')) +
+    geom_smooth(mapping = aes(y = April, x = ...1, color = 'April')) +
+    geom_smooth(mapping = aes(y = May, x = ...1, color = 'May')) +
+    geom_smooth(mapping = aes(y = June, x = ...1, color = 'June')) +
+    geom_smooth(mapping = aes(y = July, x = ...1, color = 'July')) +
+    geom_smooth(mapping = aes(y = August, x = ...1, color = 'August')) +
+    geom_smooth(mapping = aes(y = September, x = ...1, color = 'September')) +
+    geom_smooth(mapping = aes(y = October, x = ...1, color = 'October')) +
+    geom_smooth(mapping = aes(y = November, x = ...1, color = 'November')) +
+    geom_smooth(mapping = aes(y = December, x = ...1, color = 'December')) +
+    labs(x = "Year", y = "Average Sea Ice Extent", color = "Months") + 
+    ggtitle("Average Sea Ice Exent VS years (All months)")+
+    guides(color=guide_legend(override.aes=list(fill=NA))) 
+
+#combined_graphs
+
+```
+
+
+```{r, include=FALSE}
+#Cyclones
+
+#TIDY
+
+#this function can tidy both of the data sets
+TidyCyclones <- function(df){
+df2 <-  df %>% 
+  separate('4', into = c(as.character(4:21)), sep = ", ") %>%  # `4` had 18 columns of values so separating them
+  mutate(across(everything(), ~na_if(., "-999"))) %>% 
+  mutate(across(everything(), ~na_if(., "-99"))) %>% 
+  mutate(
+    Basin = ifelse(is.na(`4`), `1`, NA),
+    Observations = ifelse(is.na(`4`), `3`, NA),
+    Name = ifelse(is.na(`4`), `2`, NA)
+  ) %>% 
+  select(Basin, Name, Observations, everything()) %>% 
+  fill(Basin, Name, Observations) %>% 
+  filter(!is.na(`4`)) %>% 
+  select(-Observations) %>%  # no longer needed
+  separate(`Basin`, into = c("Basin", "Number", "BeginningYear"), sep = c(2,4), convert = TRUE) %>% 
+  separate(`1`, into = c('ObservationYear', 'Month','Day'), sep = c(4,6), convert = TRUE )%>% 
+  separate(`2`, into = c('Hour', 'Minute'), sep = 2, convert = TRUE) %>% 
+  # Rename 3,4, 5,6
+  #separate(`5`, into = c("Latitude", "HemisphereNS"), sep = 4) %>% 
+  #separate(`6`, into = c("Longitude", "HemisphereEW"), sep = 4)
+  rename(
+    'RecordIdentifier' = `3`,
+    'Status' = `4`,
+    'Latitude' = `5`,
+    'Longitude' = `6`,
+    'MaxWind' = `7`,
+    'MinPressure' = `8`,
+    '34NE_MaxExtent' = `9`,
+    '34SE_MaxExtent' = `10`,
+    '34SW_MaxExtent' = `11`,
+    '34NW_MaxExtent' = `12`,
+    '50NE_MaxExtent' = `13`,
+    '50SE_MaxExtent' = `14`,
+    '50SW_MaxExtent' = `15`,
+    '50NW_MaxExtent' = `16`,
+    '64NE_MaxExtent' = `17`,
+    '64SE_MaxExtent' = `18`,
+    '64SW_MaxExtent' = `19`,
+    '64NW_MaxExtent' = `20`,
+    'RadiusMaxWind' = `21`
+  ) %>% 
+  mutate(across('MaxWind':'RadiusMaxWind', as.numeric)) 
+  
+  return(df2)
+}
+
+AtlanticCyclonesTidy <- TidyCyclones(AtlanticCyclonesRAW) 
+PacificCyclonesTidy <- TidyCyclones(PacificCyclonesRAW)
+#--------------------
+
+#PLOT
+
+#functions to get observations of storms per year and then plotting it
+get_observations_per_year <- function(df){
+  df2 <- df %>% 
+    group_by(Basin, Number, BeginningYear) %>% 
+    summarize(count = n()) %>% 
+    arrange(BeginningYear) %>% 
+    group_by(BeginningYear) %>% 
+    summarize(Storms_per_year = n()) %>% 
+    arrange(BeginningYear)
+  
+  df2
+}
+
+plot_storms <- function(df, name){
+  plot<- df %>% 
+    ggplot(aes(BeginningYear, Storms_per_year))+
+    geom_bar(stat = "identity") +
+    labs(title = name) 
+  
+  plot
+  
+}
+
+#assigning observations/year to a variable
+AtlanticObservations <- get_observations_per_year(AtlanticCyclonesTidy) 
+PacificObservations <- get_observations_per_year(PacificCyclonesTidy) 
+
+#plotting 
+AtlanticPlot <-plot_storms(AtlanticObservations, "Atlantic storms")
+PacificPlot <- plot_storms(PacificObservations, "Pacific storms")
+
+#AtlanticPlot
+#PacificPlot
+
+
+```
+
+
+```{r, include=FALSE}
+#Emissions
+
+
+
+#Tidy the dataset
+testTibble <- emissionsTibble %>% 
+  filter(!(`EMPTY` %in% c('Emissions', 'Coal and coke (MMtonnes CO2)', 'Consumed natural gas (MMtonnes CO2)', 'Petroleum and other liquids (MMtonnes CO2)')))
+
+tidyEmissions<-testTibble %>% pivot_longer(c(`1949`:`2019`), names_to="year",values_to = "CO2 emissions") %>% filter((EMPTY=='CO2 emissions (MMtonnes CO2)')) %>%  separate(API, c("new", "type", "Country", "jsdfh"), sep = "-") %>% select(Country,year,`CO2 emissions`)
+
+
+#Convert iso codes to country names
+isoCodes<-pull(tidyEmissions,Country)
+
+fullCountry<-countrycode(isoCodes, "iso3c", "country.name")
+
+tidyEmissions1<-tidyEmissions %>%select(year,`CO2 emissions`) %>%  mutate(Country=fullCountry) %>% select(Country,year,`CO2 emissions`)
+
+
+#Rename variables 
+tidyEmissions2<-rename(tidyEmissions1, `CO2_emissions`=`CO2 emissions`)
+#glimpse(tidyEmissions2)
+
+
+
+#Change variable types to numeric
+tidyEmissions2$CO2_emissions <- as.numeric(tidyEmissions2$CO2_emissions)
+#summary(tidyEmissions2)
+
+
+tidyEmissions2$year <- as.numeric(tidyEmissions2$year)
+#summary(tidyEmissions2)
+
+#Make a separate column for total yearly emissions
+totalYearlyEmissions<-tidyEmissions2 %>% group_by(year) %>% mutate(total=sum(CO2_emissions, na.rm=TRUE))
+
+#Condense the total yearly emissions data
+filteredTotal <- filter(totalYearlyEmissions, Country=="Afghanistan", year>=1980)%>% select(year,total)
+
+
+#plot emissons data
+EmissionsPlot <- ggplot(filteredTotal) +
+geom_smooth(mapping=aes(x=year,y=total))+theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+geom_point(mapping=aes(x=year,y=total))+ggtitle("Total Yearly CO2 Emissions (in  MMtonnes) from 1980 to 2019")
+
+#EmissionsPlot
+
+
+filteredTotal1$year<-as.double(filteredTotal1$year)
+
+#summary(filteredTotal1)
+
+
+#Linear Model
+
+EmissionsModel<-lm(total~year,filteredTotal1) #Using csv file above
+
+#summary(EmissionsModel)
+
+#Find residuals 
+
+grid <- filteredTotal1 %>% 
+  group_by(year) %>% 
+  data_grid(total) %>% 
+  add_predictions(EmissionsModel)
+
+#grid
+
+
+#EmissionsModel
+#coef(EmissionsModel)
+
+YearlyEmissionsPlot <- ggplot(data=filteredTotal1)+
+  geom_point(mapping=aes(x=year,y=total))+
+  geom_abline(intercept = coef(EmissionsModel)[1], slope = coef(EmissionsModel)[2])
+
+#YearlyEmissionsPlot
+
+#Use model to predict co2 emission for 2022
+emissionsfor2022 <- coef(EmissionsModel)[2]*(2022) + coef(EmissionsModel)[1]
+
+#Model residuals
+EmissionsResiduals<-filteredTotal1 %>% add_residuals(EmissionsModel)
+
+
+
+EmissionsResidPlot<- ggplot(EmissionsResiduals)+ 
+  geom_point(mapping=aes(y=resid, x=year))
+
+#EmissionsResidPlot
+#summary(EmissionsResiduals)
+
+
+
+```
+
+
+```{r, include=FALSE}
+#Opinions
+
+#tidied fossil_more_less data -------------
+countryColumn <- fossil_more_less %>% pivot_longer(c(Argentina:Vietnam), names_to="Countries", values_to = "score")
+ClimateFossilFuels <- countryColumn %>% pivot_wider(names_from = fossil_more_less, values_from = score)
+
+#tidied climate_awareness data-------
+countryColumn <- climate_awareness %>% pivot_longer(c(Argentina:Vietnam), names_to="Countries", values_to = "score")
+ClimateAware <- countryColumn %>% pivot_wider(names_from = climate_awareness, values_from = score)
+ 
+#tidied climate_happening data--------
+countryColumn <- climate_happening %>% pivot_longer(c(Argentina:Vietnam), names_to="Countries", values_to = "score")
+ClimateHappen <- countryColumn %>% pivot_wider(names_from = climate_happening, values_from = score)
+
+#tidied climate_beliefs data---------
+countryColumn <- climate_beliefs %>% pivot_longer(c(Argentina:Vietnam), names_to="Countries", values_to = "score")
+ClimateBelief <- countryColumn %>% pivot_wider(names_from = climate_beliefs, values_from = score)
+
+#tidied climate_importance data---------
+countryColumn <- climate_importance %>% pivot_longer(c(Argentina:Vietnam), names_to="Countries", values_to = "score")
+ClimateImportance <- countryColumn %>% pivot_wider(names_from = climate_importance, values_from = score)
+
+
+
+#PLOTS
+#----------------------------------------------------------------------------------------------------------------------
+#Is climate change happening?
+ClimateHappenWorld <- add_row(ClimateHappen,
+               Countries = 'World',
+               'Yes' = sum(ClimateHappen[2]),
+               'No' = sum(ClimateHappen[3]),
+               "Don't know" = sum(ClimateHappen[4]),
+               'Refused' = sum(ClimateHappen[5]),
+               '(Unweighted Base)' = sum(ClimateHappen[6])
+               ) %>%
+  arrange(Countries)
+
+ClimateHappenWorld
+
+PlotHappen <- ClimateHappenWorld %>% filter(Countries == "World") %>% 
+  pivot_longer(2:5, names_to = "category", values_to = "values") %>% 
+  ggplot(aes('', values, fill =category)) + 
+  geom_bar(stat = "identity", colour = "black") +
+  coord_polar("y", start=0) +
+  ggtitle("World: Is climate change happening?")
+
+PlotHappen
+
+ #-------------------------------------------------------------------------------------------------
+#Most aware VS least aware countries
+
+NumericsAware <- select(ClimateAware, 2:6)
+
+ClimateAware <- ClimateAware %>% 
+  select(1:6) %>% 
+  mutate("total_votes" = rowSums(NumericsAware)) #%>%
+#  arrange(desc(total_votes)) - there are always 99-101 votes for each country - no outliers
+
+
+ClimateAwareFreq <- ClimateAware %>% 
+  mutate( `I have never heard of it` = .$`I have never heard of it`/.$total_votes,
+          `I know a little about it` = .$`I know a little about it`/.$total_votes,
+          `I know a moderate amount about it` = .$`I know a moderate amount about it`/.$total_votes,
+          `I know a lot about it` = .$`I know a lot about it`/.$total_votes,
+          Refused = .$Refused/.$total_votes) %>% 
+  select(Countries, `I know a lot about it`, `I know a moderate amount about it`, `I know a little about it`, `I have never heard of it`, Refused) %>% 
+  arrange(desc(`I know a lot about it`), desc(`I know a moderate amount about it`), desc(`I know a little about it`))
+
+ClimateAwareFreq %>% head(5)
+ClimateAwareFreq %>% tail(5)
+
+#-------------------------------------------------------------------------------------------------
+# What causes climate change
+
+
+ClimateBeliefWorld <- add_row(ClimateBelief,
+               Countries = 'World',
+               'Humans' = sum(ClimateBelief[2]),
+               'Environment' = sum(ClimateBelief[3]),
+               "Both, Humans and Environment" = sum(ClimateBelief[4]),
+               'Other' = sum(ClimateBelief[5]),
+               "Climate Change isn't Happening" = sum(ClimateBelief[6]),
+               "Refused" = sum(ClimateBelief[7]),
+               "(Unweighted Base)" = sum(ClimateBelief[8])
+               ) %>%
+  arrange(Countries)
+
+PlotClimateBelief <- ClimateBeliefWorld %>% 
+  filter(Countries == "World") %>% 
+  pivot_longer(2:7, names_to = "category", values_to = "values") %>% 
+  ggplot(aes('', values, fill =category)) + 
+  geom_bar(stat = "identity", colour = "black") +
+  coord_polar("y", start=0) +
+  ggtitle("World: Climate change is happening due to:")
+
+PlotClimateBelief
+#-------------------------------------------------------------------------------------------------
+# how important is climate change
+
+ClimateImportanceWorld <- add_row(ClimateImportance,
+               Countries = 'World',
+               'Extremely important' = sum(ClimateImportance[2]),
+               'Very important' = sum(ClimateImportance[3]),
+               "Somewhat important" = sum(ClimateImportance[4]),
+               'Not too important' = sum(ClimateImportance[5]),
+               "Not at all important" = sum(ClimateImportance[6]),
+               "Refused" = sum(ClimateImportance[7]),
+               "(Unweighted Base)" = sum(ClimateImportance[8])
+               )
+
+PlotImportance <- ClimateImportanceWorld %>% 
+  filter(Countries == "World") %>% 
+  pivot_longer(2:7, names_to = "category", values_to = "values")
+
+PlotImportance$category <- factor(PlotImportance$category, levels = c('Extremely important', 'Very important', "Somewhat important", 'Not too important', "Not at all important", "Refused"))
+
+PlotImportanceFinal  <- PlotImportance %>% 
+  ggplot(aes(category, values)) + 
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5, hjust=.3))+
+  ggtitle("World: How important is climate change")
+PlotImportanceFinal
+
+
+#-------------------------------------------------------------------------------------------------
+# Less or more fossil fuels
+
+FossilFuelsWorld <- add_row(ClimateFossilFuels,
+               Countries = 'World',
+               'Much more' = sum(ClimateFossilFuels[2]),
+               'Somewhat more' = sum(ClimateFossilFuels[3]),
+               "Same amount as today" = sum(ClimateFossilFuels[4]),
+               'Somewhat less' = sum(ClimateFossilFuels[5]),
+               "Much less" = sum(ClimateFossilFuels[6]),
+               "Don’t know" = sum(ClimateFossilFuels[7]),
+               "Refused" = sum(ClimateFossilFuels[8]),
+               "(Unweighted Base)" = sum(ClimateFossilFuels[9])
+               )
+
+PlotOpinionFossil <- FossilFuelsWorld %>% filter(Countries == "World") %>% 
+  pivot_longer(2:8, names_to = "category", values_to = "values") 
+
+PlotOpinionFossil$category <- factor(PlotOpinionFossil$category, levels = c("Much more","Somewhat more","Same amount as today","Somewhat less","Much less","Don’t know","Refused"))
+
+PlotOpinionFossilFinal <- PlotOpinionFossil %>% ggplot(aes(category, values)) + 
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5, hjust=.3))+
+  ggtitle("World: Should we use more or less fossil fuels?") 
+  
+
+PlotOpinionFossilFinal
+
+
+
+```
+
+
+```{r, include=FALSE}
+#Corrs
+
+
+#corr of cyclones and emissions
+EmissionsAtlantic <- left_join(filteredTotal1, AtlanticObservations, by = c("year" = "BeginningYear"))
+CorrEmissionsAtlantic <- cor(EmissionsAtlantic$total, EmissionsAtlantic$Storms_per_year)
+
+EmissionsPacific <- left_join(filteredTotal1, PacificObservations, by = c("year" = "BeginningYear"))
+
+CorrEmissionsPacific <- cor(EmissionsPacific$total, EmissionsPacific$Storms_per_year)
+
+#CorrEmissionsCyclones
+
+##Find Correlation between annual sea_ice index and total yearly carbon emissions
+combined<-sea_ice %>% select(...1, Annual) %>% left_join(filteredTotal1 , by=c("...1" = "year"))
+
+combinedFiltered <- combined %>% filter(!is.na(total))
+
+
+CorrEmissionsIce= cor(combinedFiltered$total,combinedFiltered$Annual)
+
+#CorrEmissionsIce
+
+```
+
+
+
+
+
+# Introduction
+
+The planet has undergone many changes in the past few decades. Among the most prolific of these changes are those concerning the Earth’s climate and human population. Increasing global temperatures, and more frequent natural disasters are some very clear symptoms of the changing climate that cannot be ignored. The purpose of this investigation is to see whether there is a connection between human consumption patterns, human opinion on climate and the changing climate of the world.
+
+--------------- 
+
+# Description of datasets used
+
+The datasets used for this project are the following:
+
+Sea-ice
+
+Int-Export
+
+Cyclones
+
+Climate-Opinion
+
+--------------- 
+
+# Tidied Datasets
+
+**Sea ice**
+```{r}
+glimpse(sea_ice)
+```
+The data present in this set was collected from the year 1978 to 2022 for each month.  There are a total of 540 observations with month and year being both categorical variables. 
+
+
+
+**Int-Export**
+```{r}
+glimpse(tidyEmissions2)
+```
+The Int-export emissions data shows the amount of CO2 emissions per year (in MMtonnes) from the year 1949 to 2019 in 230 different countries around the world. The years are categorical as they take more than one observation while the total is a discrete variable. 
+
+**Cyclones**:
+
+The Cyclones datasets show when each storm was observed, its classifications and other statistics about the storm. 
+
+**Atlantic Cyclones**
+```{r}
+glimpse(AtlanticCyclonesTidy)
+```
+There are a total of 53,501 observations of Atlantic storms and 28 variables. This dataset spans years 1851 to 2021.
+
+
+
+**Pacific Cyclones**
+```{r}
+glimpse(PacificCyclonesTidy)
+```
+There are a total of 30,008 observations of Atlantic storms and 28 variables. This dataset spans years 1949 to 2021.
+
+
+**Climate-Opinion**
+```{r}
+glimpse(ClimateHappen)
+glimpse(ClimateAware)
+glimpse(ClimateBelief)
+glimpse(ClimateImportance)
+glimpse(ClimateFossilFuels)
+```
+For all of the climate change data, the survey was conducted in 2022 in 27 countries around the world. Each question has about 6-7 options to choose from.
+
+
+--------------- 
+
+
+# Descriptive Statistics
+
+```{r, warning= FALSE}
+SeaIcePlots
+```
+
+By looking at this plot, we can see that Sea Ice Extent has constantly been on a decline since 1978. There is also a noticeable dip occurring in the year 2000. What could be causing this change? Is this an anomaly?
+
+Let's further explore whether this is just an outlier or a sign of something else…
+
+
+Let's look at the frequency of storms over years
+*Note: storms are counted for the year they began in.*
+```{r}
+AtlanticPlot
+PacificPlot
+```
+
+These plots also show a noticeable trend. In both the Pacific and Atlantic oceans, there has been an increase in storms over the years.
+
+So the sea-ice trend may not have been an anomaly...
+But what could be causing these trends? Could this be a trend caused by climate change?
+
+
+lets look at what could possible have a correlation with these patterns...
+```{r}
+EmissionsPlot
+```
+
+This plot shows that there is a clear upward trend between the 2 variables. It shows that as the years increase, the amount of carbon emissions released into the atmosphere per year also increases.
+
+- Each year, we put out more and more carbon emissions into the air. We know carbon emissions are correlated with climate change, so maybe carbon emissions indirectly are causing these trends observed in the sea ice and storms.
+
+
+## lets check the correlation between these variables...
+
+Emissions and sea ice extent:
+```{r}
+CorrEmissionsIce
+```
+Strong negative correlation between sea ice index and carbon emissions 
+
+- If pattern follows, as carbon emissions continue to rise, the amount of sea ice will continue to decline. This melting of the sea ice will raise sea levels, which is also an observed effect of climate change discussed later on in this report.
+
+
+
+Emissions and Atlantic storms:
+```{r}
+CorrEmissionsAtlantic
+```
+
+Emissions and Pacific storms
+```{r}
+CorrEmissionsPacific
+```
+Very weak positive correlation between storm frequency and emissions 
+
+- There seems to be little correlation between these factors, which implies that although carbon emissions may have an impact in increasing storm frequency, there are other un-observed underlying factors we have not looked at in this report.
+
+So, carbon emissions do in-fact have some correlation with these trends, but that is not the whole picture, as there are other factors that also have an effect on melting sea-ice and increasing storm frequency.
+
+
+## lets take a look at what people's opinions are on climate change
+
+Is climate change happening?
+```{r}
+PlotHappen
+```
+
+An overwhelming amount of people belief that climate change is indeed happening.
+
+- Around 80% of people believe that climate change is happening
+- 15% do not know whether it’s happening or not.
+- Only 5% of people do not believe climate change is happening 
+
+But, this is the opinion of all of the countries combined...
+
+So, is there a pattern about which countries' people are most aware of climate change?
+```{r}
+ClimateAwareFreq %>% head(5)
+
+ClimateAwareFreq %>% tail(5)
+```
+
+After looking the top 5 and bottom 5 most aware (of climate change) countries, I could not find an underlying pattern between what type of countries voted which way. (althought the top most aware countries are all developed countries, the least aware countries had no pattern)
+
+- Maybe, more domain knowledge is required to find a correlation of what countries are most and least likely to be aware
+
+
+**Since this survey happened in 2022, lets extrapolate what (roughly) the emissions will be in 2022**
+
+
+Model for emissions:
+```{r}
+YearlyEmissionsPlot
+```
+
+Is this really the best model?
+
+let's evaluate it:
+
+_R squared 0.9452,	Adjusted R-squared:  0.9437_
+
+According to the R^2, this model seems to capture a lot of the variance in carbon emissions.
+
+However, lets take a look at the residuals of the model.
+```{r}
+EmissionsResidPlot
+```
+
+The graph of the residuals show that there is a good chance that the model is under-fitted, as there is a clear pattern that we can observe. Furthermore, The predicted value also doesn’t take into account possible ways that the decrease in emissions during the pandemic may have affected the projected value 
+
+
+Even despite this, the model still gives us a rough number of what we can expect the carbon emissions to be in 2022
+
+Extrapolation:
+```{r}
+coef(EmissionsModel)
+```
+
+```{r}
+emissionsfor2022 <- coef(EmissionsModel)[2]*(2022) + coef(EmissionsModel)[1]
+emissionsfor2022
+```
+
+
+With 37182.79 MMTONS of CO2 predicted to be released in 2022, we can see that global emissions are constantly at an all time high every year...
+
+**but what do people in the world think causes climate change?**
+
+```{r}
+PlotClimateBelief
+```
+
+- The majority of people think humans are the cause for climate change (roughly 40%)
+- Around 33% percent of people think climate change is caused by humans 
+- Roughly 27% think that the environment is the only cause .
+
+So, The majority (83%) of people think humans play a part in causing climate change, which checks out with our ever increasing co2 emissions.
+
+
+## So lets see what people opinions on fossil fuels are:
+```{r}
+PlotOpinionFossilFinal
+```
+
+Roughly 2/3rds of the votes say we need to use less fossil fuels.
+
+- Since most people recognize we cause climate change, and could do something about it...
+
+
+## lets see how important the issue of climate change is for people
+```{r}
+PlotImportanceFinal
+```
+
+- Over 50% of the people think doing something about climate change is very important or more
+- 25% of the votes say it is somewhat important
+- The rest say it isnt very important
+
+Overall it seems that a lot of the people think climate change is an important issue.
+
+
+# Concluding the plots:
+
+People overall believe that climate change is important, and that it is a human-caused phenomenon. Yet, somehow the emissions plot suggests we are not doing anything about it. Why could that be?
+
+- I believe that although most people believe we need change, straying from old habits (using fossil fuels etc.) is difficult since most of our society depends on it, and until we can find a cheap and sustainable way to power everything, this trend of increasing emissions will only continue to go up.
+
+
+**Now that we have seen what people's opinions are, lets move on to the discussion.**
+
+--------------- 
+
+
+# Discussion
+
+[Article: The Connections Between Population and Climate Change](https://populationconnection.org/resources/population-and-climate/#:~:text=Population%20growth%2C%20along%20with%20increasing,especially%20in%20low%2Dresource%20regions.)
+
+The article explains the connections between the rising human population and climate change. An increase in human population leads to more global consumption which inevitably increases the amount of carbon emissions released into the atmosphere. This trend was confirmed in our data analysis as CO2 emissions were shown to increase steadily over the years. The article also details the physical effects of increased carbon emissions on the climate. Increased frequency of storms is one of the effects of the change in climate. This can also be confirmed by the results of our data analysis, as the frequency of storms over the years embodies a clear upward trend. However, the correlation between storm frequency and emissions was surprisingly weak, meaning there may be other underlying causes for the increase in storm frequency.
+
+The article then goes on to make the case for climate awareness and its role in reducing the effects of climate change. It states “Climate change-related education can help clarify why access to reproductive health care and family planning can help reduce climate change”. This notion was not clearly reflected in our analysis. It turns out that although the majority of people claim to have high climate awareness in 2022, yearly carbon emissions this year are projected to be at the highest they have ever been, according to our model. However, we cannot fully dismiss the idea that climate awareness reduces the effects of climate change since it is possible that the effects will be more apparent in the future. 
+
+--------------- 
+
+# Conclusion
+
+Based on the results of our analysis and the information presented in the article, it can be concluded that human actions, specifically the act of consumption leading to burning of fossil fuels does have an effect on the changing climate. This is not new knowledge, our analysis shows that the majority of our population is aware of this phenomenon. Many also believe that climate change is a significant global threat that needs to be addressed. Despite collective awareness of the problem, climate change continues to be a prominent threat to the planet. Awareness of climate may have an effect on the climate, however this is difficult to quantify. Further analysis would include seeing if there’s any mathematical correlation between human awareness and emissions, as well as taking into account other possible underlying variables.
+
+
+
+--------------- 
+
+# Citation
+
+The connections between population and climate change. Population Connection. (2021, October 13). Retrieved December 7, 2022, from https://populationconnection.org/resources/population-and-climate/#:~:text=Population%20growth%2C%20along%20with%20increasing,especially%20in%20low%2Dresource%20regions.
+
+
+--------------- 
+
+
